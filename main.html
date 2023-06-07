@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Juego Multijugador</title>
+    <style>
+        /* Estilos para el mapa y jugadores */
+        /* ... */
+    </style>
+</head>
+<body>
+    <canvas id="game-canvas" width="800" height="600"></canvas>
+
+    <script>
+        // Configuración del cliente WebSocket
+        const socket = new WebSocket('ws://192.168.100.165:8765');
+
+        socket.onopen = function() {
+            console.log('Conexión WebSocket establecida');
+
+            // Aquí puedes enviar un mensaje inicial si es necesario
+            // socket.send('Mensaje inicial');
+        };
+
+        socket.onmessage = function(event) {
+            const message = event.data;
+            // Procesar el mensaje recibido del servidor
+            // Actualizar la posición de los jugadores en el mapa
+            const playerPositions = JSON.parse(message);
+            actualizarPosicionesJugadores(playerPositions);
+        };
+
+        socket.onerror = function(error) {
+            console.error('Error en la conexión WebSocket:', error);
+        };
+
+        socket.onclose = function(event) {
+            console.log('Conexión WebSocket cerrada:', event.code, event.reason);
+        };
+
+        // Lógica del juego y manejo de eventos
+        const canvas = document.getElementById("game-canvas");
+        const context = canvas.getContext("2d");
+        const playerSize = 20;
+        let playerX = canvas.width / 2;
+        let playerY = canvas.height / 2;
+
+        // Dibujar el jugador inicialmente en el centro del canvas
+        dibujarJugador();
+
+        // Manejo de eventos de teclado
+        document.addEventListener("keydown", function(event) {
+            // Obtener la tecla presionada
+            const key = event.key;
+
+            // Actualizar la posición del jugador según la tecla presionada
+            if (key === "ArrowUp" && playerY > 0) {
+                playerY -= 10;
+            } else if (key === "ArrowDown" && playerY < canvas.height - playerSize) {
+                playerY += 10;
+            } else if (key === "ArrowLeft" && playerX > 0) {
+                playerX -= 10;
+            } else if (key === "ArrowRight" && playerX < canvas.width - playerSize) {
+                playerX += 10;
+            }
+
+            // Enviar la nueva posición del jugador al servidor
+            const playerPosition = { x: playerX, y: playerY };
+            const message = JSON.stringify(playerPosition);
+            socket.send(message);
+
+            // Actualizar la posición del jugador en el canvas
+            dibujarJugador();
+        });
+
+        function actualizarPosicionesJugadores(positions) {
+            const canvas = document.getElementById("game-canvas");
+            const context = canvas.getContext("2d");
+            const playerSize = 20;
+
+            // Limpiar el canvas
+            context.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Dibujar todos los jugadores en las nuevas posiciones
+            context.fillStyle = "blue";
+            positions.forEach((position) => {
+                context.fillRect(position.x, position.y, playerSize, playerSize);
+            });
+        }
+
+        function dibujarJugador() {
+            // Limpiar el canvas
+            context.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Dibujar el jugador en la posición actualizada
+            context.fillStyle = "blue";
+            context.fillRect(playerX, playerY, playerSize, playerSize);
+        }
+    </script>
+</body>
+</html>
