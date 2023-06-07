@@ -17,7 +17,8 @@
 
         socket.onopen = function() {
             console.log('Conexión WebSocket establecida');
-
+            let user = prompt("Ingrese su nombre de usuario");
+            socket.send(user);
             // Aquí puedes enviar un mensaje inicial si es necesario
             // socket.send('Mensaje inicial');
         };
@@ -27,6 +28,7 @@
             // Procesar el mensaje recibido del servidor
             // Actualizar la posición de los jugadores en el mapa
             const playerPositions = JSON.parse(message);
+            console.log(playerPositions);
             actualizarPosicionesJugadores(playerPositions);
         };
 
@@ -81,12 +83,18 @@
             // Limpiar el canvas
             context.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Dibujar todos los jugadores en las nuevas posiciones
-            context.fillStyle = "blue";
-            positions.forEach((position) => {
-                context.fillRect(position.x, position.y, playerSize, playerSize);
+            // Dibujar cada jugador en el mapa
+            Object.values(positions).forEach(player => {
+                console.log(player);
+                context.fillStyle = "blue";
+                context.fillRect(player.x, player.y, playerSize, playerSize);
             });
+
+            const playerPosition = { x: playerX, y: playerY };
+            const message = JSON.stringify(playerPosition);
+            socket.send(message);
         }
+
 
         function dibujarJugador() {
             // Limpiar el canvas
