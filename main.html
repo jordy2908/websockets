@@ -17,18 +17,28 @@
 
         socket.onopen = function() {
             console.log('Conexión WebSocket establecida');
-            let user = prompt("Ingrese su nombre de usuario");
-            socket.send(user);
-            // Aquí puedes enviar un mensaje inicial si es necesario
-            // socket.send('Mensaje inicial');
+            
         };
 
         socket.onmessage = function(event) {
             const message = event.data;
+            console.log('Mensaje recibido:', message);
             // Procesar el mensaje recibido del servidor
             // Actualizar la posición de los jugadores en el mapa
+            if (message.includes('create')) {
+                alert('Sala creada', message);
+            } else if (message.includes('join')) {
+                alert('Sala unida', message);
+            }
+
+            if (message == '¿Cuál es tu nombre?') {
+                let user = prompt("Ingrese su nombre de usuario");
+                socket.send(user);
+            }
+
             const playerPositions = JSON.parse(message);
             console.log(playerPositions);
+
             actualizarPosicionesJugadores(playerPositions);
         };
 
@@ -66,35 +76,63 @@
                 playerX += 10;
             }
 
-            // Enviar la nueva posición del jugador al servidor
-            const playerPosition = { x: playerX, y: playerY };
-            const message = JSON.stringify(playerPosition);
-            socket.send(message);
-
-            // Actualizar la posición del jugador en el canvas
+            // Enviar la nueva posición del jugador al servidor y refrescar la posición en el canvas
+            socket.send(JSON.stringify({ x: playerX, y: playerY }));
+            
+            // Actualizar la posición del jugador en el canvas de todos los jugadores
             dibujarJugador();
+            
         });
 
+        // Función para crear una sala de juego
+        function crearSala() {
+            // socket.send('CREATE_ROOM');
+            let user = prompt("Ingrese su nombre de usuario");
+            socket.send('create,'+user);
+
+            // socket.onmessage = function(event) {
+            //     const message = event.data;
+            //     console.log('Mensaje recibido:', message);
+
+            //     if (message.includes('create')) {
+            //     alert('Sala creada', message.split(':')[1]);
+            //     } else if (message.includes('join')) {
+            //         alert('Sala unida', message.split(':')[1]);
+            //     }
+                
+            //     if (message == '¿Cuál es tu nombre?')
+            //         socket.send(user);
+            // };
+
+            // socket.send(user)
+        }
+
+        // Función para unirse a una sala de juego
+        function unirseASala() {
+            const code = prompt('Ingrese el código de invitación:');
+            let user = prompt("Ingrese su nombre de usuario");
+            socket.send('join,' + code);
+
+            socket.send(user);
+        }
+
         function actualizarPosicionesJugadores(positions) {
-            const canvas = document.getElementById("game-canvas");
-            const context = canvas.getContext("2d");
-            const playerSize = 20;
 
             // Limpiar el canvas
             context.clearRect(0, 0, canvas.width, canvas.height);
 
             // Dibujar cada jugador en el mapa
-            Object.values(positions).forEach(player => {
-                console.log(player);
-                context.fillStyle = "blue";
+            for (const playerName in positions) {
+                const player = positions[playerName];
+                context.fillStyle = "red";
                 context.fillRect(player.x, player.y, playerSize, playerSize);
-            });
 
-            const playerPosition = { x: playerX, y: playerY };
-            const message = JSON.stringify(playerPosition);
-            socket.send(message);
+                // Dibujar el nombre del jugador
+                context.fillStyle = "black";
+                context.font = "12px Arial";
+                context.fillText(playerName, player.x, player.y - 5);
+            }
         }
-
 
         function dibujarJugador() {
             // Limpiar el canvas
@@ -105,5 +143,9 @@
             context.fillRect(playerX, playerY, playerSize, playerSize);
         }
     </script>
+
+    <!-- Botones para crear una sala y unirse a una sala -->
+    <button onclick="crearSala()">Crear Sala</button>
+    <button onclick="unirseASala()">Unirse a Sala</button>
 </body>
 </html>
