@@ -44,7 +44,7 @@ async def create_room(websocket, name):
 
     await websocket.send(f"join:{room.code}.")
 
-    await handle_player(websocket)
+    await handle_player(websocket, name)
 
 async def join_room(websocket, room_code):
 
@@ -65,7 +65,7 @@ async def join_room(websocket, room_code):
             if user != websocket:
                 await user.send(f"{username} se ha unido a la sala.")
 
-        await handle_player(websocket)
+        await handle_player(websocket, username)
 
     else:
         await websocket.send("error:Código de invitación inválido.")
@@ -85,11 +85,11 @@ async def broadcast(room_code, message):
         for user in room.users:
             await user.send(message)
 
-async def handle_player(websocket):
+async def handle_player(websocket, name):
 
     # Pide nombre para identificar al jugador
-    await websocket.send('¿Cuál es tu nombre?')
-    name = await websocket.recv()
+    # await websocket.send('¿Cuál es tu nombre?')
+    # name = await websocket.recv()
     players[name] = { 'x': 0, 'y': 0}
 
     try:
@@ -102,8 +102,6 @@ async def handle_player(websocket):
             # Actualizar las posiciones de los jugadores
             players[name]['x'] = player_position['x']
             players[name]['y'] = player_position['y']
-
-                
 
             # Enviar las nuevas posiciones
             await websocket.send(json.dumps(players))
