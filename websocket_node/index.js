@@ -73,6 +73,7 @@ function joinRoom(socket, roomCode) {
       });
 
       handlePlayer(socket, username);
+      
     });
   } else {
     socket.emit('error', 'Código de invitación inválido.');
