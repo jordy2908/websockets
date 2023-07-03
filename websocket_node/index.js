@@ -1,17 +1,18 @@
-const http = require('http');
-const { Server } = require('socket.io');
+const express = require('express');
+const app = express();
+
 
 // Clase para representar una sala y su código de invitación
 class Room {
   constructor(creator) {
     this.code = this.generateCode();
     this.creator = creator;
-    this.users = new Set();
+    this.users = []
   }
 
   generateCode() {
     // Generar un código de invitación aleatorio de 6 caracteres
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
     let code = '';
     for (let i = 0; i < 6; i++) {
       code += characters.charAt(Math.floor(Math.random() * characters.length));
@@ -19,16 +20,19 @@ class Room {
     return code;
   }
 
-  addUser(user) {
-    this.users.add(user);
+  addUser(socket, user) {
+    this.users.push({
+      'socketId': socket.id, 
+      'user': user, 
+      'state': 0
+    });
   }
 
-  removeUser(user) {
-    this.users.delete(user);
-  }
-
-  isEmpty() {
-    return this.users.size === 0;
+  removeUser(socketId) {
+    const index = this.users.findIndex(user => user.socketId === socketId);
+    if (index !== -1) {
+      this.users.splice(index, 1);
+    }
   }
 }
 
@@ -38,77 +42,92 @@ const ROOMS = {};
 // Objeto para almacenar las conexiones de los jugadores
 const players = {};
 
+
 function createRoom(socket, name) {
+  
   const room = new Room(name);
+
+  room.addUser(socket, name);
+
+  socket.join(room.code);
+
   ROOMS[room.code] = room;
-  socket.emit('create', room.code);
 
-  // Ingresa directamente a la sala con el nombre de usuario que ingresó sin pedir el nombre porque el nombre ya se lo pasamos al crear la sala
-  room.addUser(socket);
+  // console.log(ROOMS)
 
-  socket.emit('join', `${room.code}.`);
+  socket.emit('event', {
+    type: 'create',
+    room: ROOMS[room.code]
+  });
+
+  socket.emit('event', {
+    type: 'join',
+    room: ROOMS[room.code]
+  });
 
   console.log(name, 'se ha conectado a la sala', room.code);
 
-  handlePlayer(socket, name);
+  for (let i = 0; i < ROOMS[room.code].users.length; i++) {
+    console.log(ROOMS[room.code].users[i])
+  }
 }
 
-function joinRoom(socket, roomCode) {
-  // Verificar si el código de invitación es válido y si la sala existe
-  if (roomCode in ROOMS) {
-    const room = ROOMS[roomCode];
+function joinRoom(socket, roomCode, name) {
 
-    // Solicitar al usuario que ingrese su nombre de usuario
-    socket.emit('requestUsername');
-    socket.on('sendUsername', (username) => {
-      // Agregar el objeto socket a la sala en lugar del nombre de usuario
-      room.addUser(socket);
-      socket.emit('join', roomCode);
+  let room = ROOMS[roomCode];
 
-      // Enviar un mensaje de bienvenida a todos los usuarios de la sala
-      room.users.forEach((user) => {
-        if (user !== socket) {
-          user.emit('userJoined', username);
-        }
-      });
+  if (room) {
+    
+    ROOMS[roomCode].addUser(socket, name);
 
-      handlePlayer(socket, username);
-      
+    socket.join(roomCode);
+
+    // socket.emit('test', 'xd');
+
+    socket.emit('event', {
+      type: 'join',
+      room: ROOMS[roomCode]
     });
+
+
+    socket.in(roomCode).emit('event', {
+      type: 'join',
+      room: ROOMS[roomCode]
+    });
+
+    console.log(name, 'se ha conectado a la sala', roomCode);
+
+    console.log(ROOMS)
+
+    handlePlayer(socket, name, roomCode);
   } else {
-    socket.emit('error', 'Código de invitación inválido.');
-    socket.on('sendRoomCode', (newRoomCode) => {
-      joinRoom(socket, newRoomCode);
+    socket.emit('event', {
+      type : 'error',
+      msg : 'Código de sala inválido.'
     });
   }
 }
 
-function unregister(socket) {
-  for (const [roomCode, room] of Object.entries(ROOMS)) {
-    if (room.users.has(socket)) {
-      room.removeUser(socket);
-      if (room.isEmpty()) {
-        delete ROOMS[roomCode];
-      }
-    }
-  }
-}
+// function unregister(socket) {
+  
+// }
 
 function broadcast(roomCode, message) {
   if (roomCode in ROOMS) {
     const room = ROOMS[roomCode];
     room.users.forEach((user) => {
-      user.emit('message', message);
+      user.emit('event', {
+        type: 'message',
+        msg: message
+      });
     });
   }
 }
 
-function handlePlayer(socket, name) {
+function handlePlayer(socket, name, roomCode) {
   players[name] = { x: 0, y: 0 };
 
-  console.log(name, 'se ha conectado')
-
-  socket.on('message', (message) => {
+  socket.on('event', (message) => {
     try {
       // Procesar el mensaje recibido del jugador
       const playerPosition = JSON.parse(message);
@@ -117,43 +136,100 @@ function handlePlayer(socket, name) {
       players[name].y = playerPosition.y;
 
       // Enviar las nuevas posiciones
-      socket.emit('message', JSON.stringify(players));
+      // socket.emit('event', {
+      //   type : 'position',
+      //   data : JSON.stringify(players)
+      // });
+
+      socket.to(roomCode).emit('event', {
+        type: 'position',
+        players: JSON.stringify(players)
+      });
+
       // imprime en consola las posiciones de los jugadores con el nombre
       console.log(players);
     } catch (error) {
+      console.error('Error al procesar el mensaje: ', error);
+    }
+  });
+
+  // socket.on('disconnect', () => {
+  //   console.log('Conexión cerrada');
+  //   delete players[name];
+  // });
+}
+
+function handleSocket(socket) {
+  console.log("Se ha conectado un nuevo cliente")
+
+  socket.on('event', (msg) => {
+
+    try {
+      console.log('Mensaje recibido:', msg)
+
+      if (msg.type === 'create') {
+        createRoom(socket, msg.name);
+      } else if (msg.type === 'join') {
+          joinRoom(socket, msg.room, msg.name)
+      } else {
+        socket.emit('error', 'Tipo de mensaje inválido.');
+      }
+
+    }
+
+    catch (error) {
       console.error('Error al procesar el mensaje:', error);
     }
   });
 
   socket.on('disconnect', () => {
-    console.log('Conexión cerrada');
-    delete players[name];
-  });
-}
+    console.log("Se ha desconectado un cliente");
+  
+    // Recorre todas las salas y elimina al usuario de la sala
+    for (let roomCode in ROOMS) {
+      const room = ROOMS[roomCode];
+      room.removeUser(socket.id);
+  
+      // Elimina el usuario de ROOMS
+      if (room.users.length === 0) {
+        delete ROOMS[roomCode];
+      }
 
-function handleSocket(socket) {
-  socket.on('message', (message) => {
-    const [command, data] = message.split(',');
-    if (command === 'create') {
-      createRoom(socket, data);
-    } else if (command === 'join') {
-        // console.log('join, ', data);
-      joinRoom(socket, data);
+      socket.in(roomCode).emit('event', {
+        type: 'leave',
+        room: ROOMS[roomCode]
+      });
+  
+      console.log(`Usuarios en la sala ${roomCode}:`);
+      for (let i = 0; i < room.users.length; i++) {
+        console.log(room.users[i]);
+      }
     }
   });
-
-  socket.on('disconnect', () => {
-    unregister(socket);
-  });
 }
 
-const server = http.createServer();
-const io = new Server(server);
+const server = require('http').createServer(app);
+const io = require('socket.io')(server, {
+  cors: {
+    origin: '*',
+  }
+});
+
 
 io.on('connection', (socket) => {
+  socket.emit('event', {
+    type : 'connect',
+    msg : 'sorra.'
+  });
   handleSocket(socket);
 });
 
-server.listen(8765, '0.0.0.0', () => {
-  console.log('Servidor escuchando en el puerto 8765');
+// io.on('message', (message) => {
+//   console.log('Mensaje recibido:', message);
+// });
+
+// inicia el servidor con el metodo cors : *
+
+server.listen(8765, () => {
+  console.log('listening on *:8765');
 });
